@@ -279,6 +279,20 @@ start_proxy_pool_debug.bat
 start_proxy_client_debug.bat
 ```
 
+### One-Click Startup and Status
+
+For daily use, no flags are needed:
+
+| Action | Command |
+| --- | --- |
+| Start + verify (double-click) | `launch_proxy.bat` |
+| Status check anytime | `powershell -File check_proxy.ps1` |
+| Recover from a wedge | `powershell -File check_proxy.ps1 -Restart` |
+| Stop the proxy | `powershell -File check_proxy.ps1 -Stop` |
+| Auto-start at login | `.\install_autostart.ps1` (undo with `-Remove`) |
+
+`launch_proxy.bat` starts the proxy **headless** (Pool mode, 600-second upstream timeout) with all output logged to `%LOCALAPPDATA%\zcode-nvidia-nim-fix\proxy.log`, waits for `/health`, sends a **live test request** to `z-ai/glm-5.3`, and prints a `PROXY READY` banner with the exact ZCode provider settings (base URL, endpoint, API key mode, model). Exit code `0` means everything works; `2` means the proxy is up but the live model test failed. If a stale proxy process is alive but not answering, the launcher kills and restarts it automatically. `check_proxy.ps1` reports RUNNING / NOT RUNNING / WEDGED at a glance, shows key-pool, queue, and catalog health, and `-Restart` recovers a wedged proxy in one command. The login auto-start shortcut runs the same self-test silently at every login, so the proxy is verified before ZCode is even opened.
+
 The Pool launcher reads `.env`; the Client launcher forwards each client's NVIDIA key. Both use a 600-second upstream timeout and port `18787`. Stop the running proxy with `Ctrl+C` before switching modes. A saved OpenCode credential must match the newly selected mode. For no OpenCode file writes or another config path, call `run_proxy.ps1` directly:
 
 On Windows, `WinError 10013` during startup can mean the listening port is reserved even when no process owns it. Check with `netsh interface ipv4 show excludedportrange protocol=tcp`. The old default, `8787`, may fall inside a Windows-reserved range; the new default is `18787`. To override it for the current PowerShell session, set `$env:NIM_PROXY_PORT='18788'` before starting the proxy and update every IDE's local base URL to match (for example `http://127.0.0.1:18788/v1`). Do not delete Windows port reservations to fix this. If OpenCode sync is enabled, update `provider.nim-local.options.baseURL` in your private OpenCode config before restarting; direct NVIDIA providers keep their public URL.
