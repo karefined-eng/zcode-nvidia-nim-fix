@@ -2,7 +2,8 @@ param(
     [string]$BaseUrl = "http://127.0.0.1:18787",
     [int]$HealthTimeoutSeconds = 5,
     [switch]$Stop,
-    [switch]$Restart
+    [switch]$Restart,
+    [switch]$AutoFix
 )
 
 Set-StrictMode -Version Latest
@@ -55,6 +56,22 @@ if ($Restart) {
     Stop-ProxyProcesses | Out-Null
     $launcher = Join-Path $RepoRoot "launch_proxy.ps1"
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcher -NoPause
+    exit $LASTEXITCODE
+}
+
+if ($AutoFix) {
+    try {
+        $health = Invoke-RestMethod -Uri "$BaseUrl/health" -TimeoutSec $HealthTimeoutSeconds
+        exit 0
+    } catch [System.Net.WebException] {
+        if ($_.Exception.Status -ne [System.Net.WebExceptionStatus]::Timeout) {
+            exit 0
+        }
+    } catch {
+        exit 0
+    }
+    Write-Host "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') Proxy wedged on $BaseUrl; restarting" -ForegroundColor Yellow
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $RepoRoot "check_proxy.ps1") -Restart
     exit $LASTEXITCODE
 }
 

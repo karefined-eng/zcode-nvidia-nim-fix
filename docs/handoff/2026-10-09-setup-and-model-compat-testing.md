@@ -89,6 +89,21 @@ Note: the sandbox harness kills bash-tool commands that spawn `Start-Process` ch
 
 Docs updated: README "One-Click Startup and Status" + AGENTS.md run section and traps 14–16. Proxy left running headless via the new launcher flow.
 
+## 7b. Scheduled-Task Auto-Start and Watchdog (added 2026-10-09, same session)
+
+User requirement: *"every time I open ZCode I know it works"* → upgraded from a Startup-folder shortcut to two **Scheduled Tasks** (Startup shortcuts cannot delay, cannot bypass execution policy, cannot restart on failure):
+
+- **`ZCode NVIDIA NIM Proxy`** — AtLogOn + **30s delay** → `launch_proxy.ps1 -NoPause`; restart 3x on failure; 10-min execution limit; battery-safe.
+- **`ZCode NVIDIA NIM Proxy Watchdog`** — every 5 min → `check_proxy.ps1 -AutoFix` (8s health timeout). Restarts the proxy **only when wedged**; a deliberately stopped proxy is left stopped so `check_proxy.ps1 -Stop` stays authoritative.
+
+`install_autostart.ps1` was rewritten with flags (`-ScheduledTask`, `-Watchdog`, `-StartupFolder` legacy, `-Remove` removes everything), and `check_proxy.ps1` gained `-AutoFix`. The legacy Startup `.lnk` was **removed** to avoid a double start.
+
+**Verified:** both tasks register (State=Ready); logon task run manually → `LastTaskResult 0`; `-AutoFix` on a healthy proxy → silent exit 0, proxy untouched; manual Start-ScheduledTask left the proxy serving ZCode.
+
+**PS 5.1 trap found and documented:** `$trigger.RepetitionInterval = ...` on a `New-ScheduledTaskTrigger` object throws; must pass `-RepetitionInterval` to the cmdlet instead (AGENTS.md trap 17).
+
+Repo: forked to `karefined-eng/zcode-nvidia-nim-fix` (origin) with `levent-dogan/zcode-nvidia-nim-fix` as upstream; everything committed and pushed (commit `c20658b`, feat: one-click proxy launcher and status tooling).
+
 ## 8. Open Items for the Next Agent
 
 1. **Structured `tool_calls` are untested per model.** This is the deciding factor for agentic/coding use. Probe with a tool-call payload on GLM 5.3, Kimi K3, and the Nemotrons before locking a daily driver.

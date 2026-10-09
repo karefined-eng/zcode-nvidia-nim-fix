@@ -289,9 +289,16 @@ For daily use, no flags are needed:
 | Status check anytime | `powershell -File check_proxy.ps1` |
 | Recover from a wedge | `powershell -File check_proxy.ps1 -Restart` |
 | Stop the proxy | `powershell -File check_proxy.ps1 -Stop` |
-| Auto-start at login | `.\install_autostart.ps1` (undo with `-Remove`) |
+| Auto-start at login + watchdog | `.\install_autostart.ps1` (undo with `-Remove`) |
 
-`launch_proxy.bat` starts the proxy **headless** (Pool mode, 600-second upstream timeout) with all output logged to `%LOCALAPPDATA%\zcode-nvidia-nim-fix\proxy.log`, waits for `/health`, sends a **live test request** to `z-ai/glm-5.3`, and prints a `PROXY READY` banner with the exact ZCode provider settings (base URL, endpoint, API key mode, model). Exit code `0` means everything works; `2` means the proxy is up but the live model test failed. If a stale proxy process is alive but not answering, the launcher kills and restarts it automatically. `check_proxy.ps1` reports RUNNING / NOT RUNNING / WEDGED at a glance, shows key-pool, queue, and catalog health, and `-Restart` recovers a wedged proxy in one command. The login auto-start shortcut runs the same self-test silently at every login, so the proxy is verified before ZCode is even opened.
+`launch_proxy.bat` starts the proxy **headless** (Pool mode, 600-second upstream timeout) with all output logged to `%LOCALAPPDATA%\zcode-nvidia-nim-fix\proxy.log`, waits for `/health`, sends a **live test request** to `z-ai/glm-5.3`, and prints a `PROXY READY` banner with the exact ZCode provider settings (base URL, endpoint, API key mode, model). Exit code `0` means everything works; `2` means the proxy is up but the live model test failed. If a stale proxy process is alive but not answering, the launcher kills and restarts it automatically. `check_proxy.ps1` reports RUNNING / NOT RUNNING / WEDGED at a glance, shows key-pool, queue, and catalog health, and `-Restart` recovers a wedged proxy in one command.
+
+`.\install_autostart.ps1` registers two Windows Scheduled Tasks (no Startup-folder shortcut):
+
+- **Logon task** — runs `launch_proxy.ps1 -NoPause` 30 seconds after logon (bypasses execution policy, retries 3 times on failure, allowed on battery). The 30-second delay lets the session settle so the first ZCode request never races the proxy's startup.
+- **Watchdog task** — every 5 minutes it health-checks the proxy and restarts it **only if it has wedged** (a process you deliberately stopped with `check_proxy.ps1 -Stop` is left stopped, so you keep manual control).
+
+Together these mean the proxy is verified before ZCode is even opened, and a silent wedge self-heals within about five minutes instead of waiting for you to notice.
 
 The Pool launcher reads `.env`; the Client launcher forwards each client's NVIDIA key. Both use a 600-second upstream timeout and port `18787`. Stop the running proxy with `Ctrl+C` before switching modes. A saved OpenCode credential must match the newly selected mode. For no OpenCode file writes or another config path, call `run_proxy.ps1` directly:
 

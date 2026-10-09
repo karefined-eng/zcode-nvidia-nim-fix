@@ -53,7 +53,14 @@ The daily flow needs **no flags and no log reading**:
 | Glanceable status anytime | `powershell -File check_proxy.ps1` |
 | **Recover from a wedge** | `powershell -File check_proxy.ps1 -Restart` |
 | Stop the proxy | `powershell -File check_proxy.ps1 -Stop` |
-| Auto-start at login (installed) | `.\install_autostart.ps1` (undo: `-Remove`) |
+| Auto-start at login + watchdog | `.\install_autostart.ps1` (undo: `-Remove`) |
+
+Auto-start uses two **Scheduled Tasks** (registered by `install_autostart.ps1`, not a Startup shortcut):
+
+- `ZCode NVIDIA NIM Proxy` — AtLogOn trigger with a **30-second delay**, `powershell -File launch_proxy.ps1 -NoPause`, restart on failure (3x, 1 min apart), 10-minute execution limit.
+- `ZCode NVIDIA NIM Proxy Watchdog` — every 5 minutes runs `check_proxy.ps1 -AutoFix` (8s health timeout). `-AutoFix` restarts the proxy **only when WEDGED** (health timeout); a connection-refused (deliberately stopped) proxy is left stopped, so manual control keeps working.
+
+Verify a task ran: `Get-ScheduledTaskInfo -TaskName "ZCode NVIDIA NIM Proxy"` (`LastTaskResult` 0 = success). Run one manually: `Start-ScheduledTask -TaskName "ZCode NVIDIA NIM Proxy"`.
 
 `launch_proxy.ps1` starts the proxy **headless** (Pool mode, 600s timeout) with stdout/stderr redirected to `%LOCALAPPDATA%\zcode-nvidia-nim-fix\proxy.log` (rotated at 2MB to `.1`), waits for `/health`, runs a **live GLM 5.3 request**, and prints a `PROXY READY` banner with the ZCode provider settings. Exit codes: `0` ready, `1` not started, `2` up but live test failed. If a proxy process exists but health times out (wedged), the launcher **kills and restarts it automatically**.
 
@@ -134,6 +141,9 @@ Logged so the next agent does not rediscover them.
 14. **The proxy can wedge silently (discovered 2026-10-09).** Symptom: the process stays alive, `netstat` shows `LISTENING`, new connections are accepted and handler threads spawn (thread count rises), but **no endpoint ever responds** — `/health`, `/v1/models`, and chat all hang until the client times out. CPU stays at 0%. It was observed right after ZCode connected and streamed through the proxy; ZCode's abandoned connection sat in `CLOSE_WAIT`. Root cause not fully isolated (leading theory: blocking writes to the minimized console's stderr buffer); **the fix was architectural**: `launch_proxy.ps1` now starts the proxy **headless** (`-WindowStyle Hidden` with stderr redirected to `%LOCALAPPDATA%\zcode-nvidia-nim-fix\proxy.log`) instead of in a minimized console window. The headless version has served continuous ZCode streaming without wedging. Detection: `check_proxy.ps1` treats a health **timeout** as WEDGED (distinct from connection-refused = NOT RUNNING); recovery: `check_proxy.ps1 -Restart`, which `launch_proxy.ps1` also does automatically at startup.
 15. **The harness kills bash-tool commands that spawn `Start-Process` children** (`ChildProcess.kill`), but detached children survive — a headless proxy started this way keeps running after the tool call is killed. Verify state with `check_proxy.ps1` rather than trusting the command's exit.
 16. **The venv python re-execs the system python.** `.venv\Scripts\python.exe -m nvidia_nim_proxy.server` (parent) spawns `C:\Users\asamoah\AppData\Local\Programs\Python\Python312\python.exe -m nvidia_nim_proxy.server` (child, same args); the **child holds the listening port**. Stop routines must match both command lines (the `nvidia_nim_proxy.server` pattern does).
+17. **PowerShell 5.1 rejects post-hoc repetition on scheduled triggers.** `$trigger.RepetitionInterval = ...` throws "property cannot be found on this object" on the `MSFT_TaskTimeTrigger` returned by `New-ScheduledTaskTrigger`. Fix: pass `-RepetitionInterval` directly to `New-ScheduledTaskTrigger -Once -At <time> -RepetitionInterval (New-TimeSpan -Minutes 5)`. Verified working on PowerShell 5.1 / Windows 11.
+18. **Scheduled Tasks beat the Startup folder for this proxy.** The task trigger supports a logon **delay** (kills the startup race), `-ExecutionPolicy Bypass`, restart-on-failure, and an execution time limit; a Startup shortcut has none of these. Tasks register non-elevated for the current user (`-AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"`) — no admin prompt needed.
+19. **The watchdog restarts only wedged proxies, never stopped ones.** `check_proxy.ps1 -AutoFix` treats a connection-refused response as "deliberately stopped" and exits 0 silently. This is intentional: it keeps `check_proxy.ps1 -Stop` usable for mode switching instead of the watchdog resurrecting the old mode.
 
 ## Conventions
 
