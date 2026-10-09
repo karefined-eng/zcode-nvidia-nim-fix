@@ -5,12 +5,14 @@ param(
     [int]$TestTimeoutSeconds = 90,
     [int]$HealthTimeoutSeconds = 5,
     [switch]$NoSelfTest,
+    [switch]$NoNotification,
     [switch]$NoPause
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$script:WasWedged = $false
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EnvFile = Join-Path $RepoRoot ".env"
 $Launcher = Join-Path $RepoRoot "run_proxy.ps1"
@@ -94,11 +96,43 @@ function Wait-ForKey {
     }
 }
 
+function Show-Notification {
+    param(
+        [string]$Title,
+        [string]$Message,
+        [ValidateSet("Info", "Warning", "Error")]
+        [string]$Kind = "Info",
+        [int]$DisplaySeconds = 6
+    )
+    if ($NoNotification) {
+        return
+    }
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $balloon = New-Object System.Windows.Forms.NotifyIcon
+        $balloon.Icon = switch ($Kind) {
+            "Error" { [System.Drawing.SystemIcons]::Error }
+            "Warning" { [System.Drawing.SystemIcons]::Warning }
+            default { [System.Drawing.SystemIcons]::Information }
+        }
+        $balloon.BalloonTipTitle = $Title
+        $balloon.BalloonTipText = $Message
+        $balloon.Visible = $true
+        $balloon.ShowBalloonTip($DisplaySeconds * 1000)
+        Start-Sleep -Seconds $DisplaySeconds
+        $balloon.Dispose()
+    } catch {
+        # Notifications are best-effort; never fail a launch because one could not be shown.
+    }
+}
+
 Show-Header "ZCode NVIDIA NIM proxy"
 
 if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf)) {
     Show-Header "FAIL: launcher not found"
     Write-Host "Missing: $Launcher" -ForegroundColor Red
+    Show-Notification -Title "ZCode NIM proxy FAILED to start" -Message "Launcher not found: $Launcher" -Kind Error -DisplaySeconds 60
     exit 1
 }
 
@@ -110,6 +144,7 @@ if ($health) {
     if ($existing) {
         Write-Host "Proxy process exists but is not responding (wedged). Restarting it..." -ForegroundColor Yellow
         Stop-ProxyProcesses
+        $script:WasWedged = $true
     } else {
         Write-Host "Starting proxy (headless, logging to $LogPath)..."
     }
@@ -128,6 +163,7 @@ if ($health) {
         Write-Host "Check the log for the real error:" -ForegroundColor Red
         Write-Host "  $LogPath"
         Write-Host "Common cause: bad or missing keys in .env (duplicate keys are rejected)."
+        Show-Notification -Title "ZCode NIM proxy FAILED to start" -Message "No response after $StartupTimeoutSeconds s. Check $LogPath - usually .env keys." -Kind Error -DisplaySeconds 60
         Wait-ForKey
         exit 1
     }
@@ -138,6 +174,7 @@ if ($NoSelfTest) {
     Show-Header "PROXY READY (live test skipped)"
     Write-Host "  Base URL  $BaseUrl/v1"
     Write-Host "  Log       $LogPath"
+    Show-Notification -Title "ZCode NIM proxy ready" -Message "Running on $BaseUrl/v1 (live test skipped)" -Kind Info -DisplaySeconds 6
     Wait-ForKey
     exit 0
 }
@@ -145,6 +182,7 @@ if ($NoSelfTest) {
 $localKey = Get-LocalClientKey
 if (-not $localKey) {
     Show-Header "FAIL: no NIM_PROXY_CLIENT_KEY found in .env"
+    Show-Notification -Title "ZCode NIM proxy FAILED to start" -Message "No NIM_PROXY_CLIENT_KEY in .env" -Kind Error -DisplaySeconds 60
     Wait-ForKey
     exit 1
 }
@@ -174,6 +212,7 @@ if ($failure -or -not $response) {
     Write-Host "This model may be temporarily unavailable - retry, or use another"
     Write-Host "chat model from the README (e.g. moonshotai/kimi-k3)."
     Write-Host "Log: $LogPath"
+    Show-Notification -Title "ZCode NIM proxy: live test failed" -Message "Proxy is up but '$TestModel' did not answer. Try -Restart or another model." -Kind Warning -DisplaySeconds 30
     Wait-ForKey
     exit 2
 }
@@ -194,5 +233,10 @@ Write-Host "    Base URL   $BaseUrl/v1"
 Write-Host "    Endpoint   /chat/completions"
 Write-Host "    API key    local NIM_PROXY_CLIENT_KEY (from .env)"
 Write-Host "    Model      $TestModel"
+if ($script:WasWedged) {
+    Show-Notification -Title "ZCode NIM proxy: was wedged, restarted" -Message "Proxy recovered and GLM 5.3 verified OK (${latency} ms)." -Kind Warning -DisplaySeconds 20
+} else {
+    Show-Notification -Title "ZCode NIM proxy ready" -Message "GLM 5.3 verified OK (${latency} ms) - $BaseUrl/v1" -Kind Info -DisplaySeconds 6
+}
 Wait-ForKey
 exit 0
