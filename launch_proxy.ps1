@@ -6,6 +6,7 @@ param(
     [int]$HealthTimeoutSeconds = 5,
     [switch]$NoSelfTest,
     [switch]$NoNotification,
+    [switch]$NoDashboard,
     [switch]$NoPause
 )
 
@@ -77,6 +78,9 @@ function Start-ProxyHeadless {
         Move-Item -LiteralPath $LogPath -Destination "$LogPath.1" -Force
     }
     $proxyArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" -ApiKeyMode Pool -UpstreamTimeoutSeconds 600"
+    if ($NoDashboard.IsPresent) {
+        $proxyArgs += " -NoDashboard"
+    }
     Start-Process -FilePath "powershell.exe" -ArgumentList $proxyArgs -WorkingDirectory $RepoRoot -WindowStyle Hidden -RedirectStandardOutput "$LogPath.out.log" -RedirectStandardError $LogPath | Out-Null
 }
 
@@ -173,6 +177,9 @@ if ($health) {
 if ($NoSelfTest) {
     Show-Header "PROXY READY (live test skipped)"
     Write-Host "  Base URL  $BaseUrl/v1"
+    if (-not $NoDashboard.IsPresent) {
+        Write-Host "  Dashboard $BaseUrl/dashboard"
+    }
     Write-Host "  Log       $LogPath"
     Show-Notification -Title "ZCode NIM proxy ready" -Message "Running on $BaseUrl/v1 (live test skipped)" -Kind Info -DisplaySeconds 6
     Wait-ForKey
@@ -223,6 +230,9 @@ $catalog = "$($health.model_catalog.status) ($($health.model_catalog.count) mode
 
 Show-Header "PROXY READY - everything works"
 Write-Host "  Base URL          $BaseUrl/v1" -ForegroundColor Green
+if (-not $NoDashboard.IsPresent) {
+    Write-Host "  Dashboard         $BaseUrl/dashboard" -ForegroundColor Green
+}
 Write-Host "  Live test         $TestModel OK (${latency} ms)" -ForegroundColor Green
 Write-Host "  Key pool          $pool"
 Write-Host "  Model catalog     $catalog"

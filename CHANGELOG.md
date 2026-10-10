@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The project follows Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Serve a read-only local status dashboard at `GET /dashboard`: a self-contained page that polls the secret-free `GET /health` payload and shows mode, queue, key-pool, model-catalog and upstream state with no external requests.
+- Add `--no-dashboard` / `-NoDashboard` to disable the status page, and serve it only for loopback bindings so a remote binding never exposes it.
+- Print the dashboard URL from `check_proxy.ps1` when it is running and from the `launch_proxy.bat` ready banner.
+
 ## 0.3.0 - 2026-09-18
 
 ### Added

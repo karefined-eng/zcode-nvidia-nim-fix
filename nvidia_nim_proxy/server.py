@@ -25,6 +25,7 @@ from nvidia_nim_proxy.credentials import (
     fingerprint_secret as fingerprint_secret,
     load_pool_keys,
 )
+from nvidia_nim_proxy.dashboard import DASHBOARD_PAGE
 from nvidia_nim_proxy.key_pool import (
     NvidiaKeyPool,
     PoolQueueFullError,
@@ -96,6 +97,7 @@ class ProxyConfig:
         rate_limit_cooldown_seconds: int = DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS,
         max_5xx_failovers: int = DEFAULT_MAX_5XX_FAILOVERS,
         model_catalog: ModelCatalog | None = None,
+        dashboard_enabled: bool = True,
     ) -> None:
         normalized_upstream_base_url = upstream_base_url.rstrip("/")
         validate_upstream_base_url(normalized_upstream_base_url)
@@ -105,6 +107,7 @@ class ProxyConfig:
         self.api_key_mode = api_key_mode
         self.upstream_timeout_seconds = upstream_timeout_seconds
         self.model_catalog = model_catalog
+        self.dashboard_enabled = dashboard_enabled
         self.credential_broker = CredentialBroker(
             mode=api_key_mode,
             env_api_key=api_key,
@@ -498,6 +501,13 @@ class NIMProxyHandler(BaseHTTPRequestHandler):
         self._client_response_started = False
         if self.path == "/health":
             self._send_json(200, build_health_payload(self.config))
+            return
+
+        if self.path.rstrip("/") == "/dashboard":
+            if not self.config.dashboard_enabled:
+                self._send_json(404, {"error": "not_found"})
+                return
+            self._send_html(200, DASHBOARD_PAGE)
             return
 
         if self.path.rstrip("/") == "/v1/models":
@@ -1227,6 +1237,19 @@ class NIMProxyHandler(BaseHTTPRequestHandler):
         except CLIENT_DISCONNECT_ERRORS:
             logger.info("Client disconnected before JSON response could be sent; status=%s", status_code)
 
+    def _send_html(self, status_code: int, page: str) -> None:
+        response_body = page.encode("utf-8")
+        try:
+            NIMProxyHandler._begin_client_response(self)
+            self.send_response(status_code)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(response_body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(response_body)
+        except CLIENT_DISCONNECT_ERRORS:
+            logger.info("Client disconnected before dashboard response could be sent")
+
     def _send_tool_call_text_diagnostic(self, *, stream: bool) -> None:
         response_body = build_tool_call_text_diagnostic_response(stream=stream)
         try:
@@ -1366,6 +1389,11 @@ def parse_args() -> argparse.Namespace:
         "--opencode-config", type=Path,
         help="Opt in to add-only nim-local model sync in this OpenCode .json file.",
     )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Disable the read-only local status page at /dashboard.",
+    )
     return parser.parse_args()
 
 
@@ -1429,6 +1457,7 @@ def main() -> None:
             rate_limit_cooldown_seconds=args.rate_limit_cooldown_seconds,
             max_5xx_failovers=args.max_5xx_failovers,
             model_catalog=catalog,
+            dashboard_enabled=is_loopback_host(args.host) and not args.no_dashboard,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -1448,6 +1477,8 @@ def main() -> None:
     if args.opencode_config:
         logger.info("OpenCode GUI model sync enabled: credentials preserved")
     logger.info("Listening on http://%s:%s/v1", args.host, args.port)
+    if config.dashboard_enabled:
+        logger.info("Read-only local dashboard: http://%s:%s/dashboard", args.host, args.port)
     logger.info("Forwarding sanitized requests to %s", args.upstream_base_url)
     logger.info("Plain-text tool_call handling mode: %s", args.tool_call_text_mode)
     logger.info("API key mode: %s", args.api_key_mode)

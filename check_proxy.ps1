@@ -95,6 +95,11 @@ if ($state -eq "up") {
     Write-Host "  key pool       $($health.key_pool.available)/$($health.key_pool.total) available ($($health.key_pool.cooling_down) cooling, $($health.key_pool.quarantined) quarantined)"
     Write-Host "  queue          $($health.queue.active) active, $($health.queue.queued) queued"
     Write-Host "  model catalog  $($health.model_catalog.status) ($($health.model_catalog.count) models)"
+    try {
+        $null = Invoke-WebRequest -Uri "$BaseUrl/dashboard" -TimeoutSec $HealthTimeoutSeconds -UseBasicParsing
+        Write-Host "  dashboard      $BaseUrl/dashboard"
+    } catch {
+    }
     Write-Host ""
     exit 0
 }

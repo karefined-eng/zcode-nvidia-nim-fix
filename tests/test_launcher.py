@@ -88,6 +88,14 @@ def test_launcher_disables_discovery(tmp_path: Path) -> None:
     assert "--no-model-discovery" in args
 
 
+def test_launcher_disables_dashboard(tmp_path: Path) -> None:
+    args = forwarded(launch(tmp_path, "-ApiKeyMode Client -NoDashboard"))
+    assert "--no-dashboard" in args
+    assert "http://127.0.0.1:18787/dashboard" not in launch(
+        tmp_path, "-ApiKeyMode Client -NoDashboard"
+    ).stdout
+
+
 @pytest.mark.parametrize(
     "parameters",
     [

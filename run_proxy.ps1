@@ -33,6 +33,8 @@ param(
 
     [switch]$DisableModelDiscovery,
 
+    [switch]$NoDashboard,
+
     [ValidateRange(30, 604800)]
     [int]$ModelRefreshSeconds = 21600,
 
@@ -213,6 +215,9 @@ $PythonArgs += @("--model-refresh-seconds", $ModelRefreshSeconds)
 if ($DisableModelDiscovery.IsPresent) {
     $PythonArgs += "--no-model-discovery"
 }
+if ($NoDashboard.IsPresent) {
+    $PythonArgs += "--no-dashboard"
+}
 if (-not [string]::IsNullOrWhiteSpace($OpenCodeConfig)) {
     $ResolvedOpenCodeConfig = if ([System.IO.Path]::IsPathRooted($OpenCodeConfig)) {
         $OpenCodeConfig
@@ -228,6 +233,9 @@ Write-Host "Plain-text tool_call handling mode: $ToolCallTextMode"
 Write-Host "API key mode: $NormalizedApiKeyMode"
 Write-Host "Upstream timeout: $UpstreamTimeoutSeconds seconds"
 Write-Host "Queue: $MaxConcurrentPerKey active per key, $MaxQueuePerKey waiting per key, $MaxTotalQueued waiting total"
+if (-not $NoDashboard.IsPresent -and $DisplayHost -in @("127.0.0.1", "localhost", "::1", "[::1]")) {
+    Write-Host "Local dashboard: http://${DisplayHost}:${DisplayPort}/dashboard"
+}
 if ($ApiKeyMode -eq "Pool") {
     Write-Host "NVIDIA key pool entries loaded: $($NumberedKeyNames.Count)"
 }

@@ -12,6 +12,7 @@
 | Chat endpoint | `POST /v1/chat/completions` |
 | Cached model list | `GET /v1/models` |
 | Health | `GET /health` |
+| Local status page | `GET /dashboard` |
 | NVIDIA upstream | `https://integrate.api.nvidia.com/v1` |
 | Windows launcher | `run_proxy.ps1` |
 
@@ -240,6 +241,12 @@ When the upstream is NVIDIA's public endpoint, a background worker fetches `/v1/
 
 Status can be `loading`, `ready`, `stale`, `unavailable`, or `disabled`. Before the first successful refresh, `GET /v1/models` returns `503 model_catalog_unavailable`; chat remains available. Pool mode requires the local bearer key for `/v1/models`. Client mode requires a nonempty bearer value, but the public catalog lookup does not verify it with NVIDIA. Env mode permits a local unauthenticated lookup. A custom upstream or `-DisableModelDiscovery` disables public catalog discovery. The public list can include non-chat models and contains no capability or per-key entitlement details.
 
+## Local Status Dashboard
+
+Open `http://127.0.0.1:18787/dashboard` in any browser while the proxy is running. The page is a single self-contained document with no external requests: it polls `GET /health` every two seconds and renders proxy state, mode, version, queue depth, key-pool availability (available, cooling down, quarantined, active), model-catalog status and count, and the upstream URL. It is read-only, shows no credentials, and adds no upstream calls or background work.
+
+The page needs no authentication because it only reads the same secret-free `GET /health` data that `check_proxy.ps1` displays. It is served only when the proxy is bound to a loopback host (the default) and can be turned off with `-NoDashboard` / `--no-dashboard`, or by binding to a non-loopback host, in which case `/dashboard` returns `404` and chat is unaffected. `check_proxy.ps1` prints the dashboard URL when it is enabled, and `launch_proxy.bat` prints it in its ready banner.
+
 ## Test a Request
 
 Start the proxy in your chosen mode in one terminal. In another terminal, check health and send a small chat request. The example uses a deliberately invalid placeholder and therefore requires replacement with your **local pool key** in Pool mode or your **NVIDIA key** in Client mode. In Env mode, any nonempty placeholder works.
@@ -324,6 +331,7 @@ On Windows, `WinError 10013` during startup can mean the listening port is reser
 | `-Max5xxFailovers` | `1` | Alternate pool keys after upstream `5xx`/transport error |
 | `-ModelRefreshSeconds` | `21600` | Public catalog refresh interval; minimum `30` |
 | `-DisableModelDiscovery` | off | Disable `/v1/models` discovery |
+| `-NoDashboard` | off | Disable the read-only `/dashboard` status page |
 | `-OpenCodeConfig` | unset | Opt in to add-only `nim-local` sync in a strict JSON file |
 
 Queue defaults are conservative. Higher concurrency can increase NVIDIA `429` responses. The underlying Python CLI uses lower-case flags such as `--api-key-mode pool`, `--upstream-timeout-seconds 600`, `--opencode-config PATH`, and `--no-model-discovery`. Additional environment overrides include `NIM_PROXY_HOST`, `NIM_PROXY_PORT`, and `NIM_PROXY_UPSTREAM_BASE_URL`.
