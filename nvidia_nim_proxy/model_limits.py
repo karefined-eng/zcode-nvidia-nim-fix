@@ -12,6 +12,11 @@ from types import MappingProxyType
 MODEL_CONTEXT_LIMITS = MappingProxyType({
     "deepseek-ai/deepseek-v4.1-flash": 1048576,
     "google/gemma-4-31b-it": 262144,
+    "google/gemini-1.5-flash": 1048576,
+    "google/gemini-1.5-pro": 1048576,
+    "google/gemini-2.0-flash": 1048576,
+    "google/gemini-2.5-flash": 1048576,
+    "google/gemini-2.5-pro": 1048576,
     "meta/muse-glimmer-30b": 131072,
     "moonshotai/kimi-k2.6": 262144,
     "moonshotai/kimi-k3": 1048576,

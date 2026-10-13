@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from nvidia_nim_proxy.model_profiles import NVIDIA_REASONING_PROFILES, ReasoningProfile
 
+
 NVIDIA_NIM_SAFE_CHAT_FIELDS = frozenset(
     {
         "model",
@@ -26,6 +27,30 @@ NVIDIA_NIM_SAFE_CHAT_FIELDS = frozenset(
         "parallel_tool_calls",
     }
 )
+
+
+def is_nvidia_nim_provider(context: ProviderContext) -> bool:
+    """Return true when the provider identity points at NVIDIA NIM."""
+
+    provider_identity = " ".join((context.provider_name.lower(), context.provider_code.lower()))
+    base_url = context.base_url.lower()
+    return (
+        "integrate.api.nvidia.com" in base_url
+        or "nvidia" in provider_identity
+        or re.search(r"(^|[^a-z0-9])nim([^a-z0-9]|$)", provider_identity) is not None
+    )
+
+
+def is_google_gemini_provider(context: ProviderContext) -> bool:
+    """Return true when the provider identity points at Google Gemini API."""
+
+    provider_identity = " ".join((context.provider_name.lower(), context.provider_code.lower()))
+    base_url = context.base_url.lower()
+    return (
+        "generativelanguage.googleapis.com" in base_url
+        or "google" in provider_identity
+        or re.search(r"(^|[^a-z0-9])gemini([^a-z0-9]|$)", provider_identity) is not None
+    )
 
 
 @dataclass(frozen=True)
@@ -128,11 +153,25 @@ def sanitize_chat_completion_body(
 
     NVIDIA NIM rejects provider-extension fields such as ``extra_body`` at the
     top level. For NIM we keep a conservative OpenAI-compatible chat completion
-    field set. Other providers are intentionally left unchanged.
+    field set. Other providers are intentionally left unchanged, but Gemini
+    reasoning profiles are applied when applicable.
     """
 
-    if not is_nvidia_nim_provider(context):
-        return SanitizedRequest(body=dict(body), stripped_keys=())
+    if is_nvidia_nim_provider(context):
+        return _sanitize_nvidia_nim(body, context)
+
+    if is_google_gemini_provider(context):
+        return _sanitize_google_gemini(body, context)
+
+    # For all other providers, leave unchanged
+    return SanitizedRequest(body=dict(body), stripped_keys=())
+
+
+def _sanitize_nvidia_nim(
+    body: Mapping[str, Any],
+    context: ProviderContext,
+) -> SanitizedRequest:
+    """Sanitize for NVIDIA NIM: strip extra_body and unsupported fields."""
 
     cleaned: dict[str, Any] = {}
     stripped: set[str] = set()
@@ -150,4 +189,40 @@ def sanitize_chat_completion_body(
 
     return SanitizedRequest(
         body=cleaned, stripped_keys=tuple(sorted(stripped)), reasoning_policy=policy
+    )
+
+
+def _sanitize_google_gemini(
+    body: Mapping[str, Any],
+    context: ProviderContext,
+) -> SanitizedRequest:
+    """Sanitize for Google Gemini: apply reasoning profile mapping."""
+
+    cleaned: dict[str, Any] = {}
+    stripped: set[str] = set()
+    model = str(body.get("model", "")).lower()
+    profile = NVIDIA_REASONING_PROFILES.get(model)
+
+    # Gemini supports reasoning_effort in the body
+    # Preserve it if valid, otherwise strip and use default
+    requested = body.get("reasoning_effort")
+    if profile and isinstance(requested, str) and requested in profile.efforts:
+        cleaned["reasoning_effort"] = requested
+    elif "reasoning_effort" in body:
+        stripped.add("reasoning_effort")
+
+    # Pass through standard OpenAI-compatible fields
+    for key, value in body.items():
+        if key in NVIDIA_NIM_SAFE_CHAT_FIELDS:
+            cleaned[key] = value
+        elif key not in {"reasoning_effort",}:
+            stripped.add(key)
+
+    # Note: Gemini does not use extra_body at top level per its API spec
+    # If extra_body is present, it will be stripped
+    if "extra_body" in body:
+        stripped.add("extra_body")
+
+    return SanitizedRequest(
+        body=cleaned, stripped_keys=tuple(sorted(stripped)), reasoning_policy=None
     )

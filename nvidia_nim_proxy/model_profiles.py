@@ -33,6 +33,13 @@ _DEEPSEEK_V4 = ReasoningProfile(
 # do not expose an effort override. Do not infer wire support from the weights.
 _GLM_53 = ReasoningProfile(location="provider_default", efforts=frozenset(), default="max")
 _GPT_OSS = ReasoningProfile(location="body", efforts=frozenset({"low", "medium", "high"}))
+# Gemini models support reasoning_effort in the request body
+_GEMINI_FLASH = ReasoningProfile(
+    location="body", efforts=frozenset({"low", "medium", "high"}), default="medium"
+)
+_GEMINI_PRO = ReasoningProfile(
+    location="body", efforts=frozenset({"low", "medium", "high"}), default="medium"
+)
 
 NVIDIA_REASONING_PROFILES = {
     "moonshotai/kimi-k3": _KIMI_K3,
@@ -44,4 +51,9 @@ NVIDIA_REASONING_PROFILES = {
     "deepseek-ai/deepseek-v4-flash-0731": _DEEPSEEK_V4,
     "openai/gpt-oss-20b": _GPT_OSS,
     "openai/gpt-oss-120b": _GPT_OSS,
+    "google/gemini-1.5-flash": _GEMINI_FLASH,
+    "google/gemini-1.5-pro": _GEMINI_PRO,
+    "google/gemini-2.0-flash": _GEMINI_FLASH,
+    "google/gemini-2.5-flash": _GEMINI_FLASH,
+    "google/gemini-2.5-pro": _GEMINI_PRO,
 }
