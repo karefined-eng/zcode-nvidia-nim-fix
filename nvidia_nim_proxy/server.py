@@ -276,6 +276,35 @@ def resolve_upstream_api_key(config: ProxyConfig, client_authorization: str | No
     return config.credential_broker.resolve_direct_key(client_authorization)
 
 
+def build_provider_context(upstream_base_url: str) -> ProviderContext:
+    """Derive the provider identity from the actual upstream URL.
+
+    The proxy is a local OpenAI-compatible gateway that may forward to different
+    backends. Provider detection must be driven by the configured upstream base
+    URL, not a hardcoded identity, otherwise every request is sanitized as
+    NVIDIA NIM even when the upstream is Gemini or another provider.
+    """
+
+    normalized = upstream_base_url.lower()
+    if "generativelanguage.googleapis.com" in normalized:
+        return ProviderContext(
+            provider_name="google-gemini",
+            provider_code="gemini",
+            base_url=upstream_base_url,
+        )
+    if "integrate.api.nvidia.com" in normalized:
+        return ProviderContext(
+            provider_name="nvidia-nim",
+            provider_code="nim",
+            base_url=upstream_base_url,
+        )
+    return ProviderContext(
+        provider_name="nvidia-nim",
+        provider_code="nim",
+        base_url=upstream_base_url,
+    )
+
+
 def build_upstream_chat_request(
     body: dict[str, Any],
     config: ProxyConfig,
@@ -554,11 +583,7 @@ class NIMProxyHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
             return
 
-        context = ProviderContext(
-            provider_name="nvidia-nim",
-            provider_code="nim",
-            base_url=self.config.upstream_base_url,
-        )
+        context = build_provider_context(self.config.upstream_base_url)
         sanitized = sanitize_chat_completion_body(request_body, context)
 
         if sanitized.stripped_keys:

@@ -71,7 +71,7 @@ function Read-ProxyEnvironmentFile {
         Stop-WithMessage "Pool environment file not found: $Path. Create it from .env.example."
     }
 
-    $AllowedNamePattern = "^(NIM_PROXY_CLIENT_KEY|NVIDIA_API_KEY_[1-9][0-9]*)$"
+    $AllowedNamePattern = "^(NIM_PROXY_CLIENT_KEY|NIM_PROXY_UPSTREAM_BASE_URL|NVIDIA_API_KEY_[1-9][0-9]*)$"
     $Values = @{}
     $SeenNames = @{}
     $LineNumber = 0

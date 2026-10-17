@@ -153,6 +153,11 @@ Logged so the next agent does not rediscover them.
 22. **`GET /dashboard` served by the existing proxy process** costs ~0 extra RAM. When adding an in-process status page, route it in `do_GET` before `/v1/models`, gate it with a `dashboard_enabled` config flag (default `is_loopback_host(host)`), and add `--no-dashboard` CLI override — no separate process, no upstream calls, no auth (reuses secret-free `/health` data). Restart required for running proxies to pick up new routes.
 19. **The watchdog restarts only wedged proxies, never stopped ones.** `check_proxy.ps1 -AutoFix` treats a connection-refused response as "deliberately stopped" and exits 0 silently. This is intentional: it keeps `check_proxy.ps1 -Stop` usable for mode switching instead of the watchdog resurrecting the old mode.
 
+23. **Multi-root terminal may start in a different repository.** A relative command such as `powershell -File .\check_proxy.ps1` can fail with “argument ... does not exist” even though the script exists in this workspace. Use the script's absolute path or `Set-Location` to its repository before invoking it.
+
+24. **`start_gemini_proxy.ps1` set the upstream URL only at User scope.** `[System.Environment]::SetEnvironmentVariable('NIM_PROXY_UPSTREAM_BASE_URL', $url, 'User')` persists to the registry but is NOT visible to child processes spawned in the same shell — `run_proxy.ps1` → python inherited the default NVIDIA URL. Fix: set `$env:NIM_PROXY_UPSTREAM_BASE_URL = $url` in the current process so it propagates. User-scope-only assignment is silently ineffective for the launching process itself.
+25. **`proxy_gui.ps1` provider switch did not pass `-EnvFile`.** The GUI's `Start-Proxy` read `.env.gemini` for display/validation but launched `run_proxy.ps1` without `-EnvFile`, so it always read `.env` (NVIDIA) regardless of selection. Fix: pass `-EnvFile "$($cfg.EnvFile)"` in the launch args.
+
 ## Conventions
 
 - `.env`, `.venv/`, `dist/`, caches are git-ignored. Real keys live only in `.env`, process env, or IDE credential stores — never in commits, READMEs, examples, or logs.
