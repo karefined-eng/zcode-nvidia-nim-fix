@@ -18,6 +18,17 @@
 
 The proxy removes unsupported request fields, preserves messages and structured tool calls, and forwards JSON or SSE streaming responses. It does not implement the Responses, Embeddings, image, audio, or file APIs. It does not grant a larger context window or guarantee that a model will produce valid tool calls.
 
+## Why this instead of other LLM proxies?
+
+| Feature | This proxy | Typical gateways (bifrost/one-api) |
+| --- | --- | --- |
+| Zero third-party deps | Yes (stdlib Python) | No |
+| OpenCode model sync | Yes (add-only, strict JSON) | No |
+| Request sanitizer (`extra_body`) | Yes | No |
+| Key pool + FIFO queues + failover | Yes | Varies |
+| Local status dashboard | Yes | Varies |
+| Windows autostart + watchdog | Yes | No |
+| Docker/single binary | Dockerfile included | Varies |
 ## Requirements and Installation
 
 - Windows 10/11, PowerShell 5.1 or 7+, and Python 3.10+.
